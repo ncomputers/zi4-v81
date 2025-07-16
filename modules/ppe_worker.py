@@ -6,6 +6,7 @@ import cv2
 from loguru import logger
 from ultralytics import YOLO
 import redis
+import torch
 
 
 class PPEDetector(threading.Thread):
@@ -16,11 +17,15 @@ class PPEDetector(threading.Thread):
         self.cfg = cfg
         self.redis = redis.Redis.from_url(redis_url)
         self.model = YOLO(cfg.get("ppe_model", "mymodel.pt"))
-        self.device = cfg.get("device", "cpu")
-        if self.device.startswith("cuda"):
-            self.model.model.to(self.device).half()
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if self.device.type == "cuda":
+            logger.info(f"\U0001F9E0 CUDA Enabled: {torch.cuda.get_device_name(0)}")
         else:
-            self.model.model.to(self.device)
+            logger.info("\u26A0\uFE0F CUDA not available, using CPU.")
+        self.model.model.to(self.device)
+        if self.device.type == "cuda":
+            self.model.model.half()
         self.last_ts = 0
         self.snap_dir = Path(snap_dir)
         self.running = True
