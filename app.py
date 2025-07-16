@@ -53,7 +53,6 @@ config: dict
 config_path: str
 redis_client: redis.Redis
 cameras: list
-a = []
 trackers: dict[int, PersonTracker] = {}
 ppe_worker: PPEDetector | None = None
 alert_worker: AlertWorker | None = None
