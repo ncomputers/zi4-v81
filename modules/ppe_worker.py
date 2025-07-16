@@ -26,10 +26,12 @@ class PPEDetector(threading.Thread):
         self.model.model.to(self.device)
         if self.device.type == "cuda":
             self.model.model.half()
+
         self.last_ts = 0
         self.snap_dir = Path(snap_dir)
         self.running = True
         self.update_callback = update_callback
+
 
     def run(self):
         while self.running:
