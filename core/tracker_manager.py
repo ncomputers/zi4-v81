@@ -22,18 +22,20 @@ def load_cameras(r: redis.Redis, default_url: str) -> List[dict]:
         try:
             cams = json.loads(data)
             for cam in cams:
-                if isinstance(cam.get("tasks"), list):
-                    cnt = []
-                    ppe = []
-                    for t in cam["tasks"]:
-                        if t == "in_count":
-                            cnt.append("in")
-                        elif t == "out_count":
-                            cnt.append("out")
-                        else:
-                            ppe.append(t)
-                    cam["tasks"] = {"counting": cnt or ["in", "out"], "ppe": ppe}
-                cam.setdefault("tasks", {"counting": ["in", "out"], "ppe": []})
+                t = cam.get("tasks")
+                if isinstance(t, dict):
+                    lst = []
+                    if "counting" in t:
+                        if "in" in t["counting"]:
+                            lst.append("in_count")
+                        if "out" in t["counting"]:
+                            lst.append("out_count")
+                    lst.extend(t.get("ppe", []))
+                    if t.get("full_monitor"):
+                        lst.append("full_monitor")
+                    cam["tasks"] = lst
+                if not isinstance(cam.get("tasks"), list):
+                    cam["tasks"] = ["in_count", "out_count"]
                 cam.pop("mode", None)
                 cam.setdefault("type", "http")
                 cam.setdefault("reverse", False)
@@ -50,7 +52,7 @@ def load_cameras(r: redis.Redis, default_url: str) -> List[dict]:
             "id": 1,
             "name": "Camera1",
             "url": default_url,
-            "tasks": {"counting": ["in", "out"], "ppe": []},
+            "tasks": ["in_count", "out_count"],
             "enabled": True,
             "type": "http",
             "reverse": False,
@@ -67,7 +69,18 @@ def save_cameras(cams: List[dict], r: redis.Redis) -> None:
 
 
 def start_tracker(cam: dict, cfg: dict, trackers: Dict[int, PersonTracker], r: redis.Redis | None = None) -> PersonTracker:
-    tasks = cam.get("tasks", {"counting": ["in", "out"], "ppe": []})
+    tasks = cam.get("tasks", ["in_count", "out_count"])
+    if isinstance(tasks, dict):
+        lst = []
+        if "counting" in tasks:
+            if "in" in tasks["counting"]:
+                lst.append("in_count")
+            if "out" in tasks["counting"]:
+                lst.append("out_count")
+        lst.extend(tasks.get("ppe", []))
+        if tasks.get("full_monitor"):
+            lst.append("full_monitor")
+        tasks = lst
     if r is None:
         r = redis.Redis.from_url(cfg['redis_url'])
     def _broadcast():

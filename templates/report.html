@@ -12,9 +12,9 @@
 {% include 'partials/header.html' %}
 <div class="container mt-4">
     <h1 class="mb-4">Report</h1>
-    <form id="rangeForm" class="row g-2 mb-4">
-        <div class="col-auto"><input type="text" id="range" class="form-control" placeholder="Select range"></div>
-        <div class="col-auto">
+    <form id="rangeForm" class="row gy-2 gx-3 align-items-center flex-wrap mb-4">
+        <div class="col-md-auto"><input type="text" id="range" class="form-control" placeholder="Select range"></div>
+        <div class="col-md-auto">
             <select id="quick" class="form-select">
                 <option value="">Custom</option>
                 <option value="today">Today</option>
@@ -22,19 +22,19 @@
                 <option value="month">This Month</option>
             </select>
         </div>
-        <div class="col-auto">
+        <div class="col-md-auto">
             <select id="type" class="form-select">
                 <option value="person">Person Report</option>
                 {% if vehicle_enabled %}<option value="vehicle">Vehicle Report</option>{% endif %}
             </select>
         </div>
-        <div class="col-auto">
+        <div class="col-md-auto">
             <select id="view" class="form-select">
                 <option value="graph">Graph View</option>
                 <option value="table">Table View</option>
             </select>
         </div>
-        <div class="col-auto">
+        <div class="col-md-auto">
             <select id="rows" class="form-select">
                 <option value="25">25</option>
                 <option value="50" selected>50</option>
@@ -42,10 +42,8 @@
                 <option value="200">200</option>
             </select>
         </div>
-        <div class="col-auto">
+        <div class="col-md-auto d-flex gap-2">
             <button type="submit" class="btn btn-primary">Load</button>
-        </div>
-        <div class="col-auto">
             <a href="/" class="btn btn-secondary">Back</a>
         </div>
     </form>
