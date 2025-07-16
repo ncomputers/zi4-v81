@@ -52,22 +52,28 @@ class PersonTracker:
         
         self.dup_filter = DuplicateFilter(self.duplicate_filter_threshold, self.duplicate_bypass_seconds) if self.duplicate_filter_enabled else None
         cuda_available = torch.cuda.is_available()
-        logger.info(f"CUDA available: {cuda_available}")
         self.device = cfg.get("device")
         if not self.device or self.device == "auto":
-            self.device = "cuda:0" if cuda_available else "cpu"
-        if self.device.startswith("cuda") and not cuda_available:
-            logger.warning("CUDA requested but not available, falling back to CPU")
-            self.device = "cpu"
-        logger.info(f"Loading person model {self.person_model} on {self.device}")
+            self.device = torch.device("cuda:0" if cuda_available else "cpu")
+        else:
+            self.device = torch.device(self.device)
+            if self.device.type.startswith("cuda") and not cuda_available:
+                logger.warning("CUDA requested but not available, falling back to CPU")
+                self.device = torch.device("cpu")
+        logger.info(
+            f"Loading person model {self.person_model} on {self.device.type}"
+        )
+        if self.device.type == "cuda":
+            logger.info(f"\U0001F9E0 CUDA Enabled: {torch.cuda.get_device_name(0)}")
+        else:
+            logger.info("\u26A0\uFE0F CUDA not available, using CPU.")
         self.model_person = YOLO(self.person_model)
         self.email_cfg = cfg.get("email", {})
-        if self.device.startswith("cuda"):
-            self.model_person.model.to(self.device).half()
+        self.model_person.model.to(self.device)
+        if self.device.type == "cuda":
+            self.model_person.model.half()
             torch.backends.cudnn.benchmark = True
-        else:
-            self.model_person.model.to(self.device)
-        self.tracker = DeepSort(max_age=5)
+        self.tracker = DeepSort(max_age=5, embedder_gpu=self.device.type == "cuda")
         self.frame_queue = queue.Queue(maxsize=10)
         self.tracks = {}
         self.redis = redis.Redis.from_url(self.redis_url)
@@ -221,7 +227,14 @@ class PersonTracker:
                 cap = self._open_capture()
                 using_ffmpeg = hasattr(cap, "stdout")
                 if not using_ffmpeg and not cap.isOpened():
-                    raise RuntimeError("open_failed")
+                    logger.warning(f"[{self.cam_id}] Camera stream could not be opened: {self.src}")
+                    failures += 1
+                    if failures >= self.max_retry:
+                        logger.error(f"Max retries reached for {self.src}. stopping tracker")
+                        self.running = False
+                    else:
+                        time.sleep(self.retry_interval)
+                    continue
                 # reset tracker state on new connection to avoid ID reuse
                 self.tracker = DeepSort(max_age=5)
                 self.tracks.clear()

@@ -22,13 +22,17 @@ class PPEDetector(threading.Thread):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         if self.device.type == "cuda":
-            self.model.model.to(self.device).half()
+            logger.info(f"🧠 CUDA Enabled: {torch.cuda.get_device_name(0)}")
+            self.model.model.to(self.device).half()  # move + convert
         else:
-            self.model.model.to(self.device)
+            logger.info("⚠️ CUDA not available, using CPU.")
+            self.model.model.to(self.device)  # move only (no .half())
+
         self.last_ts = 0
         self.snap_dir = Path(snap_dir)
         self.running = True
         self.update_callback = update_callback
+
 
     def run(self):
         while self.running:
