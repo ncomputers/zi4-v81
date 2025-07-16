@@ -13,13 +13,13 @@ import redis
 from pathlib import Path
 from .utils import send_email, lock, SNAP_DIR
 from .duplicate_filter import DuplicateFilter
-from core.config import ANOMALY_ITEMS, COUNT_GROUPS
+from core.config import ANOMALY_ITEMS, COUNT_GROUPS, PPE_ITEMS
 
 class PersonTracker:
     """Tracks entry and exit counts using YOLOv8 and DeepSORT."""
 
     def __init__(self, cam_id: int, src: str, classes: list[str], cfg: dict,
-                 tasks: dict | None = None,
+                 tasks: list[str] | None = None,
                  src_type: str = "http", line_orientation: str | None = None,
                  reverse: bool = False, resolution: str = "original",
                  update_callback=None):
@@ -30,7 +30,7 @@ class PersonTracker:
         self.src = src
         self.src_type = src_type
         self.classes = classes
-        self.tasks = tasks or {"counting": ["in", "out"], "ppe": []}
+        self.tasks = tasks or ["in_count", "out_count"]
         self.count_classes = cfg.get("count_classes", [])
         self.ppe_classes = cfg.get("ppe_classes", [])
         self.alert_anomalies = cfg.get("alert_anomalies", [])
@@ -121,6 +121,8 @@ class PersonTracker:
             self.ppe_classes = cfg["ppe_classes"]
         if "tasks" in cfg:
             self.tasks = cfg["tasks"]
+            if not isinstance(self.tasks, list):
+                self.tasks = ["in_count", "out_count"]
         if "type" in cfg:
             self.src_type = cfg["type"]
         if "alert_anomalies" in cfg:
@@ -562,7 +564,7 @@ class PersonTracker:
                             'track_id': tid,
                             'direction': direction,
                             'path': str(path),
-                            'needs_ppe': bool(self.tasks.get('ppe'))
+                            'needs_ppe': any(t in PPE_ITEMS for t in self.tasks)
                         }
                         self.redis.zadd('person_logs', {json.dumps(entry): cross_ts})
                         limit = self.cfg.get('ppe_log_limit', 1000)

@@ -11,9 +11,9 @@
 {% include 'partials/header.html' %}
 <div class="container mt-4">
     <h1 class="mb-4">PPE Report</h1>
-    <form id="rangeForm" class="row g-2 mb-3">
-        <div class="col-auto"><input type="text" id="range" class="form-control" placeholder="Select range"></div>
-        <div class="col-auto">
+    <form id="rangeForm" class="row gy-2 gx-3 align-items-center flex-wrap mb-3">
+        <div class="col-md-auto"><input type="text" id="range" class="form-control" placeholder="Select range"></div>
+        <div class="col-md-auto">
             <select id="quick" class="form-select">
                 <option value="">Custom</option>
                 <option value="today">Today</option>
@@ -21,17 +21,17 @@
                 <option value="month">This Month</option>
             </select>
         </div>
-        <div class="col-auto">
+        <div class="col-md-auto">
             <select id="status" class="form-select" multiple size="4">
                 {% for st in status_options %}
                 <option value="{{st}}">{{st.replace('_',' ').title()}}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-auto">
+        <div class="col-md-auto">
             <input type="number" step="0.01" id="minConf" class="form-control" placeholder="Min conf" value="{{cfg.helmet_conf_thresh}}">
         </div>
-        <div class="col-auto">
+        <div class="col-md-auto">
             <select id="color" class="form-select">
                 <option value="">All Colors</option>
                 <option value="red">Red</option>
@@ -43,7 +43,7 @@
                 <option value="black">Black</option>
             </select>
         </div>
-        <div class="col d-flex justify-content-end align-items-start gap-2">
+        <div class="col-md-auto d-flex flex-wrap gap-2">
             <button type="submit" class="btn btn-primary">Load</button>
             <a id="exportLink" class="btn btn-success" href="#" download>Export</a>
             <input type="email" id="mailTo" class="form-control" placeholder="Email">
