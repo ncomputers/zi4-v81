@@ -6,8 +6,10 @@ import os
 import json
 from pathlib import Path
 import asyncio
+import logging
 
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -23,6 +25,17 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 
 # log to file with rotation
 logger.add(str(Path(__file__).resolve().parent / "app.log"), rotation="1 MB", retention=5)
+
+
+def silent_exception_handler(loop: asyncio.AbstractEventLoop, context: dict):
+    exception = context.get("exception")
+    if isinstance(exception, ConnectionResetError):
+        logging.warning("\U0001F507 Suppressed harmless ConnectionResetError (WinError 10054)")
+        return
+    loop.default_exception_handler(context)
+
+loop = asyncio.get_event_loop()
+loop.set_exception_handler(silent_exception_handler)
 
 
 
@@ -43,7 +56,18 @@ BASE_DIR = Path(__file__).parent
 TEMPLATE_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global log_task
+    if 'redis_client' in globals():
+        log_task = asyncio.create_task(count_log_loop(redis_client, trackers))
+    try:
+        yield
+    finally:
+        if log_task:
+            log_task.cancel()
+
+app = FastAPI(lifespan=lifespan)
 app.mount("/snapshots", StaticFiles(directory=str(SNAP_DIR)), name="snapshots")
 if STATIC_DIR.is_dir():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -53,7 +77,6 @@ config: dict
 config_path: str
 redis_client: redis.Redis
 cameras: list
-a = []
 trackers: dict[int, PersonTracker] = {}
 ppe_worker: PPEDetector | None = None
 alert_worker: AlertWorker | None = None
@@ -63,17 +86,7 @@ from routers import dashboard, settings, cameras as cam_routes, reports, ppe_rep
 
 log_task = None
 
-@app.on_event("startup")
-async def on_startup_event():
-    global log_task
-    if 'redis_client' in globals():
-        log_task = asyncio.create_task(count_log_loop(redis_client, trackers))
 
-@app.on_event("shutdown")
-async def on_shutdown_event():
-    global log_task
-    if log_task:
-        log_task.cancel()
 
 
 def init_app():

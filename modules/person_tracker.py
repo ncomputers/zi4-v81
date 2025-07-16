@@ -13,13 +13,13 @@ import redis
 from pathlib import Path
 from .utils import send_email, lock, SNAP_DIR
 from .duplicate_filter import DuplicateFilter
-from core.config import ANOMALY_ITEMS, COUNT_GROUPS
+from core.config import ANOMALY_ITEMS, COUNT_GROUPS, PPE_ITEMS
 
 class PersonTracker:
     """Tracks entry and exit counts using YOLOv8 and DeepSORT."""
 
     def __init__(self, cam_id: int, src: str, classes: list[str], cfg: dict,
-                 tasks: dict | None = None,
+                 tasks: list[str] | None = None,
                  src_type: str = "http", line_orientation: str | None = None,
                  reverse: bool = False, resolution: str = "original",
                  update_callback=None):
@@ -30,7 +30,7 @@ class PersonTracker:
         self.src = src
         self.src_type = src_type
         self.classes = classes
-        self.tasks = tasks or {"counting": ["in", "out"], "ppe": []}
+        self.tasks = tasks or ["in_count", "out_count"]
         self.count_classes = cfg.get("count_classes", [])
         self.ppe_classes = cfg.get("ppe_classes", [])
         self.alert_anomalies = cfg.get("alert_anomalies", [])
@@ -52,22 +52,28 @@ class PersonTracker:
         
         self.dup_filter = DuplicateFilter(self.duplicate_filter_threshold, self.duplicate_bypass_seconds) if self.duplicate_filter_enabled else None
         cuda_available = torch.cuda.is_available()
-        logger.info(f"CUDA available: {cuda_available}")
         self.device = cfg.get("device")
         if not self.device or self.device == "auto":
-            self.device = "cuda:0" if cuda_available else "cpu"
-        if self.device.startswith("cuda") and not cuda_available:
-            logger.warning("CUDA requested but not available, falling back to CPU")
-            self.device = "cpu"
-        logger.info(f"Loading person model {self.person_model} on {self.device}")
+            self.device = torch.device("cuda:0" if cuda_available else "cpu")
+        else:
+            self.device = torch.device(self.device)
+            if self.device.type.startswith("cuda") and not cuda_available:
+                logger.warning("CUDA requested but not available, falling back to CPU")
+                self.device = torch.device("cpu")
+        logger.info(
+            f"Loading person model {self.person_model} on {self.device.type}"
+        )
+        if self.device.type == "cuda":
+            logger.info(f"\U0001F9E0 CUDA Enabled: {torch.cuda.get_device_name(0)}")
+        else:
+            logger.info("\u26A0\uFE0F CUDA not available, using CPU.")
         self.model_person = YOLO(self.person_model)
         self.email_cfg = cfg.get("email", {})
-        if self.device.startswith("cuda"):
-            self.model_person.model.to(self.device).half()
+        self.model_person.model.to(self.device)
+        if self.device.type == "cuda":
+            self.model_person.model.half()
             torch.backends.cudnn.benchmark = True
-        else:
-            self.model_person.model.to(self.device)
-        self.tracker = DeepSort(max_age=5)
+        self.tracker = DeepSort(max_age=5, embedder_gpu=self.device.type == "cuda")
         self.frame_queue = queue.Queue(maxsize=10)
         self.tracks = {}
         self.redis = redis.Redis.from_url(self.redis_url)
@@ -121,6 +127,8 @@ class PersonTracker:
             self.ppe_classes = cfg["ppe_classes"]
         if "tasks" in cfg:
             self.tasks = cfg["tasks"]
+            if not isinstance(self.tasks, list):
+                self.tasks = ["in_count", "out_count"]
         if "type" in cfg:
             self.src_type = cfg["type"]
         if "alert_anomalies" in cfg:
@@ -219,7 +227,14 @@ class PersonTracker:
                 cap = self._open_capture()
                 using_ffmpeg = hasattr(cap, "stdout")
                 if not using_ffmpeg and not cap.isOpened():
-                    raise RuntimeError("open_failed")
+                    logger.warning(f"[{self.cam_id}] Camera stream could not be opened: {self.src}")
+                    failures += 1
+                    if failures >= self.max_retry:
+                        logger.error(f"Max retries reached for {self.src}. stopping tracker")
+                        self.running = False
+                    else:
+                        time.sleep(self.retry_interval)
+                    continue
                 # reset tracker state on new connection to avoid ID reuse
                 self.tracker = DeepSort(max_age=5)
                 self.tracks.clear()
@@ -562,7 +577,7 @@ class PersonTracker:
                             'track_id': tid,
                             'direction': direction,
                             'path': str(path),
-                            'needs_ppe': bool(self.tasks.get('ppe'))
+                            'needs_ppe': any(t in PPE_ITEMS for t in self.tasks)
                         }
                         self.redis.zadd('person_logs', {json.dumps(entry): cross_ts})
                         limit = self.cfg.get('ppe_log_limit', 1000)

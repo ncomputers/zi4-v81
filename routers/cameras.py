@@ -49,22 +49,12 @@ async def add_camera(request: Request):
     name = data.get('name') or f"Camera{len(cams)+1}"
     url = data.get('url')
     src_type = data.get('type', 'http')
-    tasks = data.get('tasks', {})
+    tasks = data.get('tasks', [])
     reverse = bool(data.get('reverse'))
     orientation = data.get('line_orientation', 'vertical')
     resolution = data.get('resolution', 'original')
-    if isinstance(tasks, list):
-        cnt, ppe = [], []
-        for t in tasks:
-            if t == 'in_count':
-                cnt.append('in')
-            elif t == 'out_count':
-                cnt.append('out')
-            else:
-                ppe.append(t)
-        tasks = {'counting': cnt, 'ppe': ppe}
-    if not isinstance(tasks, dict):
-        tasks = {'counting': ['in', 'out'], 'ppe': []}
+    if not isinstance(tasks, list):
+        tasks = ['in_count', 'out_count']
     if not url:
         return {'error': 'Missing URL'}
     cam_id = max([c['id'] for c in cams], default=0) + 1
@@ -119,18 +109,9 @@ async def update_camera(cam_id: int, request: Request):
         if cam['id'] == cam_id:
             if 'tasks' in data:
                 tasks_upd = data['tasks']
-                if isinstance(tasks_upd, list):
-                    cnt, ppe = [], []
-                    for t in tasks_upd:
-                        if t == 'in_count':
-                            cnt.append('in')
-                        elif t == 'out_count':
-                            cnt.append('out')
-                        else:
-                            ppe.append(t)
-                    tasks_upd = {'counting': cnt, 'ppe': ppe}
-                if isinstance(tasks_upd, dict):
-                    cam['tasks'] = tasks_upd
+                if not isinstance(tasks_upd, list):
+                    tasks_upd = ['in_count', 'out_count']
+                cam['tasks'] = tasks_upd
             if 'url' in data:
                 cam['url'] = data['url']
             if 'type' in data:
