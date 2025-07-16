@@ -18,15 +18,14 @@ class PPEDetector(threading.Thread):
         self.redis = redis.Redis.from_url(redis_url)
         self.model = YOLO(cfg.get("ppe_model", "mymodel.pt"))
 
-        # Proper device detection
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
         if self.device.type == "cuda":
-            logger.info(f"🧠 CUDA Enabled: {torch.cuda.get_device_name(0)}")
-            self.model.model.to(self.device).half()  # move + convert
+            logger.info(f"\U0001F9E0 CUDA Enabled: {torch.cuda.get_device_name(0)}")
         else:
-            logger.info("⚠️ CUDA not available, using CPU.")
-            self.model.model.to(self.device)  # move only (no .half())
+            logger.info("\u26A0\uFE0F CUDA not available, using CPU.")
+        self.model.model.to(self.device)
+        if self.device.type == "cuda":
+            self.model.model.half()
 
         self.last_ts = 0
         self.snap_dir = Path(snap_dir)

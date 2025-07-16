@@ -60,6 +60,6 @@
   ],
   "settings_password": "000",
   "max_retry": 5,
-  "logo1_path": "static/logo1.png",
+  "logo_url": "static/logo1.png",
   "logo2_path": "static/logo2.png"
 }
